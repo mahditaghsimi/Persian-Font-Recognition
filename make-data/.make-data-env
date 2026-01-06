@@ -1,49 +1,49 @@
-# تنظیمات تولید دیتاست
+# Dataset generation settings
 
-# تعداد تصویر برای هر فونت
+# Number of images per font
 IMAGES_PER_FONT=50
 
-# تعداد تصویر برای اعداد (برای هر فونت)
+# Number of digit images (per font)
 DIGIT_IMAGES_PER_FONT=20
 
-# محدوده اندازه فونت (پیکسل)
+# Font size range (pixels)
 FONT_SIZE_MIN=20
 FONT_SIZE_MAX=80
 
-# محدوده ابعاد تصویر (پیکسل)
+# Image dimensions range (pixels)
 IMAGE_WIDTH_MIN=300
 IMAGE_WIDTH_MAX=800
 IMAGE_HEIGHT_MIN=100
 IMAGE_HEIGHT_MAX=300
 
-# محدوده طول متن (تعداد کلمات)
+# Text length range (number of words)
 TEXT_LENGTH_MIN=3
 TEXT_LENGTH_MAX=20
 
-# احتمال اعمال افکت‌ها (0.0 تا 1.0)
+# Effect application probabilities (0.0 to 1.0)
 BLUR_PROBABILITY=0.3
 NOISE_PROBABILITY=0.3
 ROTATION_PROBABILITY=0.2
 BRIGHTNESS_PROBABILITY=0.3
 GRAYSCALE_PROBABILITY=0.3
 
-# محدوده شدت تاری (پیکسل)
+# Blur intensity range (pixels)
 BLUR_MIN=1
 BLUR_MAX=3
 
-# محدوده شدت نویز (0-100)
+# Noise intensity range (0–100)
 NOISE_MIN=5
 NOISE_MAX=25
 
-# محدوده چرخش (درجه)
+# Rotation range (degrees)
 ROTATION_MIN=-15
 ROTATION_MAX=15
 
-# محدوده تغییر روشنایی (0.5 تا 1.5)
+# Brightness adjustment range (0.5 to 1.5)
 BRIGHTNESS_MIN=0.7
 BRIGHTNESS_MAX=1.3
 
-# رنگ‌های متن و پس‌زمینه (RGB)
-# فرمت: R,G,B;R,G,B;...
+# Text and background colors (RGB)
+# Format: R,G,B;R,G,B;...
 TEXT_COLORS=0,0,0;50,50,50;100,100,100;150,150,150;200,0,0;0,100,0;0,0,200
 BACKGROUND_COLORS=255,255,255;240,240,240;220,220,220;200,200,200;255,250,200;200,255,200;200,200,255
