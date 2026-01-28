@@ -1,0 +1,124 @@
+# .augmentations_env
+
+# -------------------------
+# Output control
+# -------------------------
+N_AUG_PER_IMAGE=2
+KEEP_ORIGINAL=false
+RANDOM_SEED=
+
+# -------------------------
+# IO paths (relative to augmentations.py)
+# -------------------------
+DATA_DIR=../data
+AUG_DATA_DIR=../data_augmentations
+
+# -------------------------
+# Save
+# -------------------------
+SAVE_FORMAT=png
+
+# -------------------------
+# Enable/Disable Augmentations
+# -------------------------
+USE_ROTATION=true
+USE_FLIP=true
+USE_BRIGHTNESS_CONTRAST=true
+USE_BLUR=true
+USE_NOISE=true
+USE_AFFINE=true
+USE_INVERT=true
+
+# --- Color Augmentations ---
+# Complete replacement of white background
+USE_BACKGROUND_REPLACEMENT=true  # <--- New flag for the main feature
+
+# Full coloring of both text and background
+USE_COLOR_COMBINATIONS=true
+
+# Half-and-half colored background
+USE_SPLIT_COLOR_BG=true
+
+# --- Other Augmentations ---
+# Text highlighting
+USE_HIGHLIGHT_TEXT=true
+
+#USE_COLOR_COMBINATIONS=true
+
+# Half-and-half colored background
+USE_SPLIT_COLOR_BG=true
+
+# --- Other Augmentations ---
+# Text highlighting
+USE_HIGHLIGHT_TEXT=true
+
+# Random resizing
+USE_RANDOM_RESIZE=true
+
+
+# -------------------------
+# Base Params
+# -------------------------
+MAX_ROTATION_ANGLE=5
+BRIGHTNESS_MIN=0.8
+BRIGHTNESS_MAX=1.2
+CONTRAST_MIN=0.8
+CONTRAST_MAX=1.2
+BLUR_MAX_RADIUS=1.2
+NOISE_STD_MIN=2.0
+NOISE_STD_MAX=10.0
+AFFINE_MAX_TRANSLATE_FRACTION=0.02
+AFFINE_SCALE_MIN=0.95
+AFFINE_SCALE_MAX=1.05
+INVERT_PROB=0.15
+
+# -------------------------
+# Segmentation (text vs background)
+# -------------------------
+TEXT_IS_DARK=true
+
+# =========================================================================
+# Main section: three types of background color transformations
+# (These do NOT interfere with each other)
+# =========================================================================
+
+# -------------------------
+# 1. Background Color Replacement (Your Main Request)
+# -------------------------
+BG_REPLACEMENT_COLORS=255,255,255;240,240,240;200,200,200;180,180,180;150,150,150;255,230,230;240,240,255;200,255,200;180,255,180;255,255,200;230,230,230;255,240,255;200,255,255;255,220,255;180,200,200;150,180,180;255,255,150;255,240,240;200,240,200;240,240,0;100,200,255;255,100,100;120,180,255;255,160,160;180,255,255;255,200,255;100,255,100;200,100,255;240,200,200
+BG_REPLACEMENT_PROB=0.8 # Probability of applying this background replacement
+
+# -------------------------
+# 2. Color combinations (changes both text and background)
+# -------------------------
+COLOR_COMBINATIONS=0,0,0|255,255,255;255,255,255|0,0,0;0,0,0|255,0,0;0,0,0|0,255,0;0,0,0|0,0,255;0,0,0|255,255,0;0,0,0|0,255,255;0,0,0|255,0,255;0,0,0|255,165,0;0,0,0|128,0,128;0,0,0|0,128,128;0,0,0|128,0,0;0,0,0|0,128,0;0,0,0|0,0,128;0,0,0|255,192,203;0,0,0|173,216,230;0,0,0|152,251,152;0,0,0|238,130,238;0,0,0|210,105,30;0,0,0|244,164,96;255,255,255|70,130,180;255,255,255|25,25,112;255,255,255|46,139,87;255,255,255|139,0,0;255,255,255|199,21,133;255,255,255|72,61,139;255,255,255|0,100,0;255,255,255|139,69,19;255,255,255|128,128,0;255,255,255|47,79,79
+COLOR_COMBO_PROB=0.5 # Probability of applying this color combination
+
+# -------------------------
+# 3. Split color background (half-half)
+# -------------------------
+SPLIT_BG_ORIENTATION=random
+SPLIT_BG_PROB=0.35 # Probability of applying this background split
+
+# =========================================================================
+# Other augmentations
+# =========================================================================
+
+# -------------------------
+# Highlight text params
+# -------------------------
+HIGHLIGHT_STROKE_WIDTH_MIN=1
+HIGHLIGHT_STROKE_WIDTH_MAX=3
+HIGHLIGHT_STROKE_COLORS=255,255,0;255,120,0;0,255,255;255,0,255;0,0,0;255,255,255
+HIGHLIGHT_PROB=0.6
+HIGHLIGHT_TEXT_CONTRAST_MIN=1.0
+HIGHLIGHT_TEXT_CONTRAST_MAX=1.4
+HIGHLIGHT_TEXT_SHARPNESS_MIN=1.0
+HIGHLIGHT_TEXT_SHARPNESS_MAX=1.6
+
+# -------------------------
+# Random resize params
+# -------------------------
+RANDOM_RESIZE_SCALE_MIN=0.85
+RANDOM_RESIZE_SCALE_MAX=1.20
+RANDOM_RESIZE_RETURN_TO_ORIGINAL=true

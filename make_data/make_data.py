@@ -15,7 +15,7 @@ except ImportError:
 
 
 class HTMLDatasetGenerator:
-    def __init__(self, config_path='.make_data_env'):
+    def __init__(self, config_path = Path(__file__).parent / '.make_data_env'):
         self.config = self._load_config(config_path)
         self.base_dir = Path(__file__).parent.parent
         self.fonts_dir = self.base_dir / 'fonts'
@@ -205,15 +205,14 @@ class HTMLDatasetGenerator:
         print("Dataset generation completed successfully!")
         print(f"Output path: {self.data_dir}")
         print("=" * 60)
-
-def run():
         print("=" * 60)
         print("Starting Persian font dataset generation (black & white)")
         print("=" * 60)
 
+def make_data():
 
         generator = HTMLDatasetGenerator()
         generator.generate_dataset()
 
 if __name__ == "__main__":
-    run()
+    make_data()
