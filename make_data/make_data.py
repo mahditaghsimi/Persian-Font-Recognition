@@ -15,12 +15,12 @@ except ImportError:
 
 
 class HTMLDatasetGenerator:
-    def __init__(self, config_path='.make-data-env'):
+    def __init__(self, config_path='.make_data_env'):
         self.config = self._load_config(config_path)
         self.base_dir = Path(__file__).parent.parent
         self.fonts_dir = self.base_dir / 'fonts'
         self.data_dir = self.base_dir / 'data'
-        self.text_file = self.base_dir / 'make-data' / 'persian-text-for-make-data.txt'
+        self.text_file = self.base_dir / 'make_data' / 'persian_text_for_make_data.txt'
 
         self.persian_text = self._load_persian_text()
         self.words = self.persian_text.split()
@@ -206,16 +206,14 @@ class HTMLDatasetGenerator:
         print(f"Output path: {self.data_dir}")
         print("=" * 60)
 
+def run():
+        print("=" * 60)
+        print("Starting Persian font dataset generation (black & white)")
+        print("=" * 60)
+
+
+        generator = HTMLDatasetGenerator()
+        generator.generate_dataset()
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("Starting Persian font dataset generation (black & white)")
-    print("=" * 60)
-
-    print("\nRequired dependencies:")
-    print("pip install playwright arabic-reshaper python-bidi")
-    print("playwright install chromium")
-    print()
-
-    generator = HTMLDatasetGenerator()
-    generator.generate_dataset()
+    run()
