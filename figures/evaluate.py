@@ -1,4 +1,4 @@
-# evaluate.py - Model Evaluation and Analysis
+# evaluate.py - Model Evaluation and Analysis (4-Channel Version with Edge & Corner Features)
 
 import os
 import sys
@@ -36,15 +36,13 @@ def find_project_files():
     """
     Automatically find model and data file paths
     """
-    # Current file path
     current_dir = Path(__file__).parent.absolute()
     project_root = current_dir.parent if current_dir.name == 'figures' else current_dir
 
-    # Search for model
     model_path = None
     encoder_path = None
 
-    # First search in model folder
+    # Search in model folder
     model_dir = project_root / 'model'
     if model_dir.exists():
         model_file = model_dir / 'persian_font_model.pth'
@@ -67,7 +65,6 @@ def find_project_files():
     if data_aug_dir.exists():
         data_path = str(data_aug_dir)
     else:
-        # fallback to data
         data_dir = project_root / 'data'
         if data_dir.exists():
             data_path = str(data_dir)
@@ -76,78 +73,197 @@ def find_project_files():
         'model_path': model_path,
         'encoder_path': encoder_path,
         'data_path': data_path,
-        'output_dir': str(current_dir)  # Output in the same location as the file
+        'output_dir': str(current_dir)
     }
 
 
-# ==========================
-# 1. Model Architecture
-# ==========================
+# ===================== Feature Extraction Functions =====================
+def extract_edge_features(image):
+    """Extract edge features using Canny and Sobel operators"""
+    img_np = np.array(image)
 
-class DeepFontNet(nn.Module):
-    def __init__(self, num_classes):
-        super(DeepFontNet, self).__init__()
+    # Canny edge detection
+    edges_canny = cv2.Canny(img_np, 50, 150)
 
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=5, padding=2)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.pool1 = nn.MaxPool2d(2, 2)
+    # Sobel edge detection
+    sobel_x = cv2.Sobel(img_np, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(img_np, cv2.CV_64F, 0, 1, ksize=3)
+    sobel_combined = np.sqrt(sobel_x ** 2 + sobel_y ** 2)
+    sobel_combined = np.uint8(sobel_combined / sobel_combined.max() * 255)
 
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=2)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.pool2 = nn.MaxPool2d(2, 2)
+    # Combine features
+    edge_features = np.maximum(edges_canny, sobel_combined)
 
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm2d(128)
-        self.pool3 = nn.MaxPool2d(2, 2)
+    return edge_features
 
-        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
-        self.bn4 = nn.BatchNorm2d(256)
 
-        self.deconv1 = nn.ConvTranspose2d(256, 128, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.bn5 = nn.BatchNorm2d(128)
+def extract_corner_features(image):
+    """Extract corner features using Harris Corner Detection"""
+    img_np = np.array(image)
 
-        self.deconv2 = nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.bn6 = nn.BatchNorm2d(64)
+    # Harris corner detection
+    img_float = np.float32(img_np)
+    corners = cv2.cornerHarris(img_float, blockSize=2, ksize=3, k=0.04)
+    corners = cv2.dilate(corners, None)
 
-        self.global_pool = nn.AdaptiveAvgPool2d(1)
+    # Normalize
+    corners_normalized = np.uint8(corners / corners.max() * 255)
 
-        self.fc1 = nn.Linear(64, 512)
-        self.dropout1 = nn.Dropout(0.5)
-        self.fc2 = nn.Linear(512, 256)
-        self.dropout2 = nn.Dropout(0.5)
-        self.fc3 = nn.Linear(256, num_classes)
+    return corners_normalized
 
-        self.relu = nn.ReLU()
+
+def preprocess_image_with_features(image):
+    """
+    Preprocess image and extract structural features
+    Returns a 4-channel tensor: [original, edges, corners, gradient]
+    """
+    # Resize to target size
+    if isinstance(image, np.ndarray):
+        image = cv2.resize(image, (105, 105))
+    else:
+        image = image.resize((105, 105))
+        image = np.array(image)
+
+    # Extract features
+    edge_features = extract_edge_features(image)
+    corner_features = extract_corner_features(image)
+
+    # Calculate gradient magnitude
+    gradient_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
+    gradient_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
+    gradient_mag = np.sqrt(gradient_x ** 2 + gradient_y ** 2)
+    gradient_mag = np.uint8(gradient_mag / gradient_mag.max() * 255)
+
+    # Stack all channels: [original, edges, corners, gradient]
+    combined = np.stack([image, edge_features, corner_features, gradient_mag], axis=0)
+
+    # Normalize to [0, 1]
+    combined = combined.astype(np.float32) / 255.0
+
+    return combined
+
+
+# ===================== Channel and Spatial Attention =====================
+class ChannelAttention(nn.Module):
+    def __init__(self, in_channels, reduction=16):
+        super(ChannelAttention, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+
+        self.fc = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels // reduction, 1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels // reduction, in_channels, 1, bias=False)
+        )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        x = self.relu(self.bn1(self.conv1(x)))
-        x = self.pool1(x)
+        avg_out = self.fc(self.avg_pool(x))
+        max_out = self.fc(self.max_pool(x))
+        out = self.sigmoid(avg_out + max_out)
+        return x * out
 
+
+class SpatialAttention(nn.Module):
+    def __init__(self, kernel_size=7):
+        super(SpatialAttention, self).__init__()
+        self.conv = nn.Conv2d(2, 1, kernel_size, padding=kernel_size // 2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        out = torch.cat([avg_out, max_out], dim=1)
+        out = self.sigmoid(self.conv(out))
+        return x * out
+
+
+# ===================== Improved Model (4-Channel Input) =====================
+class ImprovedDeepFontNet(nn.Module):
+    def __init__(self, num_classes):
+        super(ImprovedDeepFontNet, self).__init__()
+
+        # Multi-scale first block (accepts 4 input channels: original, edges, corners, gradient)
+        self.conv1a = nn.Conv2d(4, 64, kernel_size=3, padding=1)
+        self.conv1b = nn.Conv2d(4, 64, kernel_size=5, padding=2)
+        self.bn1 = nn.BatchNorm2d(128)
+        self.pool1 = nn.MaxPool2d(2, 2)
+        self.ca1 = ChannelAttention(128)
+        self.sa1 = SpatialAttention()
+
+        # Second block
+        self.conv2 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(256)
+        self.pool2 = nn.MaxPool2d(2, 2)
+        self.ca2 = ChannelAttention(256)
+        self.sa2 = SpatialAttention()
+
+        # Third block
+        self.conv3 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(512)
+        self.pool3 = nn.MaxPool2d(2, 2)
+        self.ca3 = ChannelAttention(512)
+        self.sa3 = SpatialAttention()
+
+        # Global pooling (both avg and max)
+        self.global_avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.global_max_pool = nn.AdaptiveMaxPool2d(1)
+
+        # Fully connected layers
+        self.fc1 = nn.Linear(512 * 2, 512)
+        self.bn_fc1 = nn.BatchNorm1d(512)
+        self.dropout1 = nn.Dropout(0.5)
+
+        self.fc2 = nn.Linear(512, 256)
+        self.bn_fc2 = nn.BatchNorm1d(256)
+        self.dropout2 = nn.Dropout(0.3)
+
+        self.fc3 = nn.Linear(256, num_classes)
+
+        self.leaky_relu = nn.LeakyReLU(0.1)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        # Multi-scale first block
+        x1a = self.relu(self.conv1a(x))
+        x1b = self.relu(self.conv1b(x))
+        x = torch.cat([x1a, x1b], dim=1)
+        x = self.bn1(x)
+        x = self.pool1(x)
+        x = self.ca1(x)
+        x = self.sa1(x)
+
+        # Second block
         x = self.relu(self.bn2(self.conv2(x)))
         x = self.pool2(x)
+        x = self.ca2(x)
+        x = self.sa2(x)
 
+        # Third block
         x = self.relu(self.bn3(self.conv3(x)))
         x = self.pool3(x)
+        x = self.ca3(x)
+        x = self.sa3(x)
 
-        x = self.relu(self.bn4(self.conv4(x)))
+        # Global pooling
+        avg_pool = self.global_avg_pool(x).view(x.size(0), -1)
+        max_pool = self.global_max_pool(x).view(x.size(0), -1)
+        x = torch.cat([avg_pool, max_pool], dim=1)
 
-        x = self.relu(self.bn5(self.deconv1(x)))
-        x = self.relu(self.bn6(self.deconv2(x)))
-
-        x = self.global_pool(x)
-        x = x.view(x.size(0), -1)
-
-        x = self.relu(self.fc1(x))
+        # FC layers
+        x = self.leaky_relu(self.bn_fc1(self.fc1(x)))
         x = self.dropout1(x)
-        x = self.relu(self.fc2(x))
+
+        x = self.leaky_relu(self.bn_fc2(self.fc2(x)))
         x = self.dropout2(x)
+
         x = self.fc3(x)
 
         return x
 
 
 # ==========================
-# 2. Dataset Class
+# Dataset Class
 # ==========================
 
 class FontDataset(Dataset):
@@ -163,12 +279,12 @@ class FontDataset(Dataset):
 
 
 # ==========================
-# 3. Data Loader
+# Data Loader with 4-Channel Features
 # ==========================
 
 def load_test_data(data_dir, label_encoder):
     """
-    Load all data and split into test set
+    Load all data with 4-channel feature extraction and split into test set
     """
     from sklearn.model_selection import train_test_split
 
@@ -187,18 +303,18 @@ def load_test_data(data_dir, label_encoder):
         for img_file in font_dir.glob('*.png'):
             img = cv2.imread(str(img_file), cv2.IMREAD_GRAYSCALE)
             if img is not None:
-                img = cv2.resize(img, (105, 105))
-                img = img.astype('float32') / 255.0
-                images.append(img)
+                # Apply 4-channel feature extraction
+                img_features = preprocess_image_with_features(img)
+                images.append(img_features)
                 labels.append(font_name)
 
-    images = np.array(images).reshape(-1, 1, 105, 105)
+    images = np.array(images)  # Shape: (N, 4, 105, 105)
     labels = label_encoder.transform(labels)
 
-    # Split like training
+    # Split like training (80/20)
     _, X_test, _, y_test = train_test_split(
         images, labels,
-        test_size=0.25,
+        test_size=0.2,
         random_state=42,
         stratify=labels
     )
@@ -209,21 +325,17 @@ def load_test_data(data_dir, label_encoder):
 
 
 # ==========================
-# 4. Visualization Functions
+# Visualization Functions
 # ==========================
 
 def plot_confusion_matrix(y_true, y_pred, class_names, save_dir):
-    """
-    Plot Confusion Matrix
-    """
+    """Plot Confusion Matrix"""
     cm = confusion_matrix(y_true, y_pred)
 
     plt.figure(figsize=(max(12, len(class_names) * 0.8), max(10, len(class_names) * 0.7)))
 
-    # Calculate percentages
     cm_percent = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
 
-    # Create annotation
     annot = np.empty_like(cm, dtype=object)
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
@@ -247,12 +359,9 @@ def plot_confusion_matrix(y_true, y_pred, class_names, save_dir):
 
 
 def plot_per_class_metrics(y_true, y_pred, class_names, save_dir):
-    """
-    Plot accuracy chart for each class
-    """
+    """Plot accuracy chart for each class"""
     precision, recall, f1, support = precision_recall_fscore_support(y_true, y_pred, average=None)
 
-    # Calculate accuracy for each class
     per_class_acc = []
     for i in range(len(class_names)):
         mask = (y_true == i)
@@ -263,10 +372,9 @@ def plot_per_class_metrics(y_true, y_pred, class_names, save_dir):
             per_class_acc.append(0)
 
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-
     x_pos = np.arange(len(class_names))
 
-    # 1. Accuracy per class
+    # 1. Accuracy
     bars1 = axes[0, 0].bar(x_pos, per_class_acc, color='steelblue', alpha=0.8, edgecolor='black')
     axes[0, 0].set_xlabel('Font Name', fontsize=12, fontweight='bold')
     axes[0, 0].set_ylabel('Accuracy (%)', fontsize=12, fontweight='bold')
@@ -329,9 +437,7 @@ def plot_per_class_metrics(y_true, y_pred, class_names, save_dir):
 
 
 def plot_roc_curves(model, test_loader, label_encoder, device, save_dir):
-    """
-    Plot ROC Curve for all classes
-    """
+    """Plot ROC Curve for all classes"""
     model.eval()
 
     all_labels = []
@@ -351,7 +457,6 @@ def plot_roc_curves(model, test_loader, label_encoder, device, save_dir):
 
     n_classes = len(label_encoder.classes_)
 
-    # Calculate ROC for each class
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
@@ -360,7 +465,6 @@ def plot_roc_curves(model, test_loader, label_encoder, device, save_dir):
         fpr[i], tpr[i], _ = roc_curve((all_labels == i).astype(int), all_probs[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
 
-    # Plot
     plt.figure(figsize=(14, 10))
 
     colors = cycle(plt.cm.tab20.colors)
@@ -387,9 +491,7 @@ def plot_roc_curves(model, test_loader, label_encoder, device, save_dir):
 
 
 def plot_top_k_accuracy(model, test_loader, device, k_values, save_dir):
-    """
-    Calculate and plot Top-K Accuracy
-    """
+    """Calculate and plot Top-K Accuracy"""
     model.eval()
 
     all_labels = []
@@ -415,7 +517,6 @@ def plot_top_k_accuracy(model, test_loader, device, k_values, save_dir):
         acc = correct / len(all_labels) * 100
         top_k_accs.append(acc)
 
-    # Plot
     plt.figure(figsize=(12, 7))
 
     colors = ['steelblue', 'green', 'orange', 'red']
@@ -429,7 +530,6 @@ def plot_top_k_accuracy(model, test_loader, device, k_values, save_dir):
     plt.ylim([0, 105])
     plt.grid(True, alpha=0.3, axis='y')
 
-    # Add values on bars
     for i, bar in enumerate(bars):
         height = bar.get_height()
         plt.text(bar.get_x() + bar.get_width() / 2., height,
@@ -445,9 +545,7 @@ def plot_top_k_accuracy(model, test_loader, device, k_values, save_dir):
 
 
 def save_classification_report(y_true, y_pred, class_names, save_dir):
-    """
-    Save Classification Report as text file
-    """
+    """Save Classification Report as text file"""
     report = classification_report(y_true, y_pred, target_names=class_names, digits=4)
 
     report_path = os.path.join(save_dir, '05_classification_report.txt')
@@ -462,9 +560,7 @@ def save_classification_report(y_true, y_pred, class_names, save_dir):
 
 
 def plot_sample_predictions(model, test_loader, label_encoder, device, num_samples, save_dir):
-    """
-    Display sample predictions
-    """
+    """Display sample predictions"""
     model.eval()
 
     images_list = []
@@ -480,7 +576,8 @@ def plot_sample_predictions(model, test_loader, label_encoder, device, num_sampl
             _, predicted = torch.max(probs, 1)
 
             for i in range(min(len(images), num_samples - len(images_list))):
-                images_list.append(images[i].cpu().numpy())
+                # Use only the first channel (original image) for display
+                images_list.append(images[i][0].cpu().numpy())
                 labels_list.append(labels[i].item())
                 preds_list.append(predicted[i].item())
                 probs_list.append(probs[i].max().item())
@@ -488,7 +585,6 @@ def plot_sample_predictions(model, test_loader, label_encoder, device, num_sampl
             if len(images_list) >= num_samples:
                 break
 
-    # Plot
     rows = 4
     cols = 5
     fig, axes = plt.subplots(rows, cols, figsize=(20, 16))
@@ -498,7 +594,7 @@ def plot_sample_predictions(model, test_loader, label_encoder, device, num_sampl
         col = idx % cols
         ax = axes[row, col]
 
-        img = images_list[idx].squeeze()
+        img = images_list[idx]
         true_label = label_encoder.classes_[labels_list[idx]]
         pred_label = label_encoder.classes_[preds_list[idx]]
         confidence = probs_list[idx] * 100
@@ -519,9 +615,7 @@ def plot_sample_predictions(model, test_loader, label_encoder, device, num_sampl
 
 
 def plot_prediction_confidence_distribution(model, test_loader, device, save_dir):
-    """
-    Prediction confidence distribution
-    """
+    """Prediction confidence distribution"""
     model.eval()
 
     correct_confidences = []
@@ -541,7 +635,6 @@ def plot_prediction_confidence_distribution(model, test_loader, device, save_dir
             correct_confidences.extend(confidences[correct_mask].cpu().numpy())
             wrong_confidences.extend(confidences[~correct_mask].cpu().numpy())
 
-    # Plot
     plt.figure(figsize=(12, 7))
 
     plt.hist(correct_confidences, bins=50, alpha=0.7, color='green',
@@ -555,7 +648,6 @@ def plot_prediction_confidence_distribution(model, test_loader, device, save_dir
     plt.legend(fontsize=12)
     plt.grid(True, alpha=0.3)
 
-    # Add means
     if len(correct_confidences) > 0:
         plt.axvline(np.mean(correct_confidences), color='darkgreen', linestyle='--',
                     linewidth=2, label=f'Correct Mean: {np.mean(correct_confidences):.3f}')
@@ -571,10 +663,7 @@ def plot_prediction_confidence_distribution(model, test_loader, device, save_dir
 
 
 def plot_error_analysis(y_true, y_pred, class_names, save_dir):
-    """
-    Error analysis: which fonts have the most errors
-    """
-    # Find fonts with the most errors
+    """Error analysis: which fonts have the most errors"""
     per_class_errors = []
 
     for i in range(len(class_names)):
@@ -584,13 +673,10 @@ def plot_error_analysis(y_true, y_pred, class_names, save_dir):
             error_rate = errors / mask.sum() * 100
             per_class_errors.append((class_names[i], error_rate, errors, mask.sum()))
 
-    # Sort by error rate
     per_class_errors.sort(key=lambda x: x[1], reverse=True)
 
-    # Plot
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
 
-    # 1. Error Rate
     font_names = [x[0] for x in per_class_errors]
     error_rates = [x[1] for x in per_class_errors]
 
@@ -612,7 +698,6 @@ def plot_error_analysis(y_true, y_pred, class_names, save_dir):
                      f'{error_rates[i]:.1f}%',
                      ha='left', va='center', fontsize=9, fontweight='bold')
 
-    # 2. Number of Errors
     error_counts = [x[2] for x in per_class_errors]
 
     bars2 = axes[1].barh(range(len(font_names)), error_counts, color=colors, alpha=0.8, edgecolor='black')
@@ -637,7 +722,7 @@ def plot_error_analysis(y_true, y_pred, class_names, save_dir):
 
 
 # ==========================
-# 5. Main Evaluation Function
+# Main Evaluation Function
 # ==========================
 
 def evaluate_model(model_path=None,
@@ -647,12 +732,10 @@ def evaluate_model(model_path=None,
                    batch_size=32,
                    k_values=[1, 3, 5, 10],
                    num_sample_predictions=20):
-    """
-    Complete model evaluation and generate all charts
-    """
+    """Complete model evaluation and generate all charts"""
 
     print("\n" + "=" * 80)
-    print("PERSIAN FONT RECOGNITION - MODEL EVALUATION")
+    print("PERSIAN FONT RECOGNITION - MODEL EVALUATION (4-Channel with Edge & Corner)")
     print("=" * 80 + "\n")
 
     # Auto-detect paths if not provided
@@ -683,6 +766,7 @@ def evaluate_model(model_path=None,
 
     # Device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    use_cuda = torch.cuda.is_available()
     print(f"Device: {device}")
 
     if torch.cuda.is_available():
@@ -700,8 +784,8 @@ def evaluate_model(model_path=None,
     print(f"  Classes: {', '.join(label_encoder.classes_)}\n")
 
     # Load model
-    print("Loading trained model...")
-    model = DeepFontNet(num_classes=num_classes).to(device)
+    print("Loading trained ImprovedDeepFontNet model (4-channel)...")
+    model = ImprovedDeepFontNet(num_classes=num_classes).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
     model.eval()
 
@@ -710,12 +794,18 @@ def evaluate_model(model_path=None,
     print(f"  Total parameters: {total_params:,}\n")
 
     # Load test data
-    print("Loading test data...")
+    print("Loading test data with 4-channel feature extraction...")
     X_test, y_test = load_test_data(data_dir, label_encoder)
 
     # Create DataLoader
     test_dataset = FontDataset(X_test, y_test)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=use_cuda
+    )
 
     print(f"Test batches: {len(test_loader)}\n")
 
@@ -743,36 +833,29 @@ def evaluate_model(model_path=None,
     print("GENERATING VISUALIZATIONS")
     print("=" * 80 + "\n")
 
-    # 1. Confusion Matrix
+    # Generate all visualizations
     print("[1/8] Generating confusion matrix...")
     plot_confusion_matrix(all_labels, all_preds, label_encoder.classes_, save_dir=output_dir)
 
-    # 2. Per-class metrics
     print("[2/8] Generating per-class metrics...")
     plot_per_class_metrics(all_labels, all_preds, label_encoder.classes_, save_dir=output_dir)
 
-    # 3. ROC Curves
     print("[3/8] Generating ROC curves...")
     roc_auc_scores = plot_roc_curves(model, test_loader, label_encoder, device, save_dir=output_dir)
 
-    # 4. Top-K Accuracy
     print("[4/8] Computing Top-K accuracy...")
     top_k_scores = plot_top_k_accuracy(model, test_loader, device, k_values=k_values, save_dir=output_dir)
 
-    # 5. Classification Report
     print("[5/8] Saving classification report...")
     save_classification_report(all_labels, all_preds, label_encoder.classes_, save_dir=output_dir)
 
-    # 6. Sample Predictions
     print("[6/8] Generating sample predictions...")
     plot_sample_predictions(model, test_loader, label_encoder, device,
                             num_samples=num_sample_predictions, save_dir=output_dir)
 
-    # 7. Confidence Distribution
     print("[7/8] Analyzing confidence distribution...")
     plot_prediction_confidence_distribution(model, test_loader, device, save_dir=output_dir)
 
-    # 8. Error Analysis
     print("[8/8] Performing error analysis...")
     plot_error_analysis(all_labels, all_preds, label_encoder.classes_, save_dir=output_dir)
 
@@ -806,12 +889,10 @@ def evaluate_model(model_path=None,
 
 
 # ==========================
-# 6. Run Evaluation
+# Run Evaluation
 # ==========================
 
 if __name__ == "__main__":
-    # Run evaluation with automatic path detection
     results = evaluate_model()
-
     print("Evaluation completed successfully!")
     print("Check the output folder for all visualizations!")

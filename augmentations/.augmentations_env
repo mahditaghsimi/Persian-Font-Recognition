@@ -4,7 +4,7 @@
 # Output control
 # -------------------------
 N_AUG_PER_IMAGE=2
-KEEP_ORIGINAL=false
+KEEP_ORIGINAL=true
 RANDOM_SEED=
 
 # -------------------------
@@ -22,12 +22,12 @@ SAVE_FORMAT=png
 # Enable/Disable Augmentations
 # -------------------------
 USE_ROTATION=true
-USE_FLIP=true
+USE_FLIP=false
 USE_BRIGHTNESS_CONTRAST=true
 USE_BLUR=true
 USE_NOISE=true
 USE_AFFINE=true
-USE_INVERT=true
+USE_INVERT=false
 
 # --- Color Augmentations ---
 # Complete replacement of white background
@@ -41,7 +41,7 @@ USE_SPLIT_COLOR_BG=true
 
 # --- Other Augmentations ---
 # Text highlighting
-USE_HIGHLIGHT_TEXT=true
+USE_HIGHLIGHT_TEXT=false
 
 #USE_COLOR_COMBINATIONS=true
 
@@ -50,7 +50,7 @@ USE_SPLIT_COLOR_BG=true
 
 # --- Other Augmentations ---
 # Text highlighting
-USE_HIGHLIGHT_TEXT=true
+USE_HIGHLIGHT_TEXT=false
 
 # Random resizing
 USE_RANDOM_RESIZE=true

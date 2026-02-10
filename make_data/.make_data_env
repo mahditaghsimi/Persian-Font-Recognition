@@ -2,10 +2,10 @@ bash
 # Dataset generation settings
 
 # Number of images per font
-IMAGES_PER_FONT=50
+IMAGES_PER_FONT=90
 
 # Number of digit images (per font)
-DIGIT_IMAGES_PER_FONT=20
+DIGIT_IMAGES_PER_FONT=10
 
 # Font size range (pixels)
 FONT_SIZE_MIN=20
