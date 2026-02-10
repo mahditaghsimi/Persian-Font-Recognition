@@ -91,7 +91,7 @@ If all dependencies are installed correctly, Persian text will be rendered prope
 
 ---
 
-## 🚀 Usage
+##  Usage
 
 #### 1️⃣ Generate Dataset
 ```bash
